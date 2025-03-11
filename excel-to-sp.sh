@@ -104,26 +104,40 @@ if [ "$ENVIRONMENT" != "dev" ] && [ "$ENVIRONMENT" != "staging" ]; then
 fi
 
 # Execute transform-excel and pipe to portfolio-mms-import
-echo "Processing Excel file..."
-(
-"$SCRIPTPATH/transform-excel.sh" \
-    -u "$MMS_USERNAME" \
-    -p "$MMS_PASSWORD" \
-    -f "$EXCEL_FILE" \
-    --env "$ENVIRONMENT" | \
-"$SCRIPTPATH/portfolio-mms-import.sh" \
-    -u "$SOLAR_PLANIT_URL" \
-    -t "$SP_IMPORT_API_TOKEN"
-) &
+if [ "$BATCH_MODE" = true ]; then
+    # In batch mode, capture only the output from portfolio-mms-import
+    RESPONSE=$("$SCRIPTPATH/transform-excel.sh" \
+        -u "$MMS_USERNAME" \
+        -p "$MMS_PASSWORD" \
+        -f "$EXCEL_FILE" \
+        --env "$ENVIRONMENT" 2>/dev/null | \
+    "$SCRIPTPATH/portfolio-mms-import.sh" \
+        -u "$SOLAR_PLANIT_URL" \
+        -t "$SP_IMPORT_API_TOKEN" 2>/dev/null)
 
-# Get the background process PID
-PIPELINE_PID=$!
+    # Output only the response from portfolio-mms-import
+    echo "$RESPONSE"
+else
+    # In interactive mode, show all output and spinner
+    echo "Processing Excel file..."
+    (
+    "$SCRIPTPATH/transform-excel.sh" \
+        -u "$MMS_USERNAME" \
+        -p "$MMS_PASSWORD" \
+        -f "$EXCEL_FILE" \
+        --env "$ENVIRONMENT" | \
+    "$SCRIPTPATH/portfolio-mms-import.sh" \
+        -u "$SOLAR_PLANIT_URL" \
+        -t "$SP_IMPORT_API_TOKEN"
+    ) &
 
-# Start the spinner if not in batch mode
-if [ "$BATCH_MODE" = false ]; then
+    # Get the background process PID
+    PIPELINE_PID=$!
+
+    # Start the spinner
     spinner $PIPELINE_PID &
     SPINNER_PID=$!
-fi
 
-# Wait for the pipeline to complete
-wait $PIPELINE_PID
+    # Wait for the pipeline to complete
+    wait $PIPELINE_PID
+fi
